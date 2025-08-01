@@ -19,7 +19,7 @@ mlfqs-recent-1 FAIL
 alarm-zero PASS
 mlfqs-load-60 FAIL
 mlfqs-fair-2 FAIL
-priority-change FAIL
+priority-change PASS
 alarm-negative PASS
 priority-donate-sema FAIL
 alarm-multiple PASS
