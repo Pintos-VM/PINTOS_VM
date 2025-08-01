@@ -2,6 +2,7 @@
 #define VM_VM_H
 #include <stdbool.h>
 #include "threads/palloc.h"
+#include "hash.h"
 
 enum vm_type {
 	/* page not initialized */
@@ -45,6 +46,7 @@ struct page {
 	void *va;              /* Address in terms of user space */
 	struct frame *frame;   /* Back reference for frame */
 
+<<<<<<< HEAD
 	/* Your implementation */
 
 	/* Per-type data are binded into the union.
@@ -53,6 +55,16 @@ struct page {
 		struct uninit_page uninit;
 		struct anon_page anon;
 		struct file_page file;
+=======
+    /* Your implementation */
+    struct hash_elem hash_elem;
+    /* Per-type data are binded into the union.
+     * Each function automatically detects the current union */
+    union {
+        struct uninit_page uninit;
+        struct anon_page anon;
+        struct file_page file;
+>>>>>>> b1f7c46 (dfdf)
 #ifdef EFILESYS
 		struct page_cache page_cache;
 #endif
@@ -82,9 +94,23 @@ struct page_operations {
 	if ((page)->operations->destroy) (page)->operations->destroy (page)
 
 /* Representation of current process's memory space.
+<<<<<<< HEAD
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
 struct supplemental_page_table {
+=======
+ We don't want to force you to obey any specific design for this struct.
+ All designs up to you for this. */
+ /**
+  * @brief 구조체 전부를 구현해하네;;; hash를 써서 page key value 형식으로 관리 어떄?
+  * 
+  */
+struct supplemental_page_table {
+        struct page page;
+        struct 
+
+
+>>>>>>> b1f7c46 (dfdf)
 };
 
 #include "threads/thread.h"

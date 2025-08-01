@@ -61,10 +61,17 @@ err:
 }
 
 /* Find VA from spt and return page. On error, return NULL. */
+<<<<<<< HEAD
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
 	/* TODO: Fill this function. */
+=======
+struct page *spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
+    struct page *page = NULL;
+    /* TODO: Fill this function. */
+    
+>>>>>>> b1f7c46 (dfdf)
 
 	return page;
 }
