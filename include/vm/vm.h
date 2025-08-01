@@ -3,6 +3,7 @@
 #include <stdbool.h>
 
 #include "threads/palloc.h"
+#include "hash.h"
 
 enum vm_type {
     /* page not initialized */
@@ -47,7 +48,7 @@ struct page {
     struct frame *frame; /* Back reference for frame */
 
     /* Your implementation */
-
+    struct hash_elem hash_elem;
     /* Per-type data are binded into the union.
      * Each function automatically detects the current union */
     union {
@@ -84,9 +85,18 @@ struct page_operations {
     (page)->operations->destroy(page)
 
 /* Representation of current process's memory space.
- * We don't want to force you to obey any specific design for this struct.
- * All designs up to you for this. */
-struct supplemental_page_table {};
+ We don't want to force you to obey any specific design for this struct.
+ All designs up to you for this. */
+ /**
+  * @brief 구조체 전부를 구현해하네;;; hash를 써서 page key value 형식으로 관리 어떄?
+  * 
+  */
+struct supplemental_page_table {
+        struct page page;
+        struct 
+
+
+};
 
 #include "threads/thread.h"
 void supplemental_page_table_init(struct supplemental_page_table *spt);
