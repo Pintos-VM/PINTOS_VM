@@ -21,7 +21,7 @@ static void rehash (struct hash *);
 
 /* Initializes hash table H to compute hash values using HASH and
    compare hash elements using LESS, given auxiliary data AUX. */
-<<<<<<< HEAD
+
 bool
 hash_init (struct hash *h,
 		hash_hash_func *hash, hash_less_func *less, void *aux) {
@@ -31,7 +31,7 @@ hash_init (struct hash *h,
 	h->hash = hash;
 	h->less = less;
 	h->aux = aux;
-=======
+
    /**
  * @brief 해시 테이블을 초기화합니다.
  *
@@ -66,7 +66,7 @@ bool hash_init(struct hash *h, hash_hash_func *hash, hash_less_func *less, void 
    functions hash_clear(), hash_destroy(), hash_insert(),
    hash_replace(), or hash_delete(), yields undefined behavior,
    whether done in DESTRUCTOR or elsewhere. */
-<<<<<<< HEAD
+
 void
 hash_clear (struct hash *h, hash_action_func *destructor) {
 	size_t i;
@@ -79,7 +79,6 @@ hash_clear (struct hash *h, hash_action_func *destructor) {
  */
 void hash_clear(struct hash *h, hash_action_func *destructor) {
     size_t i;
->>>>>>> b1f7c46 (dfdf)
 
 	for (i = 0; i < h->bucket_cnt; i++) {
 		struct list *bucket = &h->buckets[i];
@@ -107,7 +106,7 @@ void hash_clear(struct hash *h, hash_action_func *destructor) {
    hash_insert(), hash_replace(), or hash_delete(), yields
    undefined behavior, whether done in DESTRUCTOR or
    elsewhere. */
-<<<<<<< HEAD
+
 void
 hash_destroy (struct hash *h, hash_action_func *destructor) {
 	if (destructor != NULL)
@@ -131,7 +130,7 @@ void hash_destroy(struct hash *h, hash_action_func *destructor) {
    no equal element is already in the table.
    If an equal element is already in the table, returns it
    without inserting NEW. */
-<<<<<<< HEAD
+
 struct hash_elem *
 hash_insert (struct hash *h, struct hash_elem *new) {
 	struct list *bucket = find_bucket (h, new);
@@ -174,7 +173,7 @@ hash_replace (struct hash *h, struct hash_elem *new) {
 	return old;
 }
 
-<<<<<<< HEAD
+
 /* Finds and returns an element equal to E in hash table H, or a
    null pointer if no equal element exists in the table. */
 struct hash_elem *
@@ -189,7 +188,7 @@ hash_find (struct hash *h, struct hash_elem *e) {
  */
 struct hash_elem *hash_find(struct hash *h, struct hash_elem *e) {
     return find_elem(h, find_bucket(h, e), e);
->>>>>>> b1f7c46 (dfdf)
+
 }
 
 /* Finds, removes, and returns an element equal to E in hash
@@ -199,7 +198,7 @@ struct hash_elem *hash_find(struct hash *h, struct hash_elem *e) {
    If the elements of the hash table are dynamically allocated,
    or own resources that are, then it is the caller's
    responsibility to deallocate them. */
-<<<<<<< HEAD
+
 struct hash_elem *
 hash_delete (struct hash *h, struct hash_elem *e) {
 	struct hash_elem *found = find_elem (h, find_bucket (h, e), e);
@@ -208,7 +207,7 @@ hash_delete (struct hash *h, struct hash_elem *e) {
 		rehash (h);
 	}
 	return found;
-=======
+
    /**
  * @brief 특정 요소 삭제
  * @param h 해시 테이블
@@ -222,7 +221,7 @@ struct hash_elem *hash_delete(struct hash *h, struct hash_elem *e) {
         rehash(h);
     }
     return found;
->>>>>>> b1f7c46 (dfdf)
+
 }
 
 /* Calls ACTION for each element in hash table H in arbitrary
@@ -231,11 +230,6 @@ struct hash_elem *hash_delete(struct hash *h, struct hash_elem *e) {
    any of the functions hash_clear(), hash_destroy(),
    hash_insert(), hash_replace(), or hash_delete(), yields
    undefined behavior, whether done from ACTION or elsewhere. */
-<<<<<<< HEAD
-void
-hash_apply (struct hash *h, hash_action_func *action) {
-	size_t i;
-=======
    /**
  * @brief 모든 요소에 대해 주어진 함수 적용
  * @param h 해시 테이블
@@ -243,7 +237,6 @@ hash_apply (struct hash *h, hash_action_func *action) {
  */
 void hash_apply(struct hash *h, hash_action_func *action) {
     size_t i;
->>>>>>> b1f7c46 (dfdf)
 
 	ASSERT (action != NULL);
 
@@ -279,19 +272,16 @@ void hash_apply(struct hash *h, hash_action_func *action) {
       Modifying hash table H during iteration, using any of the
    functions hash_clear(), hash_destroy(), hash_insert(),
    hash_replace(), or hash_delete(), invalidates all
-<<<<<<< HEAD
    iterators. */
 void
 hash_first (struct hash_iterator *i, struct hash *h) {
 	ASSERT (i != NULL);
 	ASSERT (h != NULL);
-=======
    iterators.
    */
 void hash_first(struct hash_iterator *i, struct hash *h) {
     ASSERT(i != NULL);
     ASSERT(h != NULL);
->>>>>>> b1f7c46 (dfdf)
 
 	i->hash = h;
 	i->bucket = i->hash->buckets;
@@ -331,11 +321,9 @@ hash_cur (struct hash_iterator *i) {
 }
 
 /* Returns the number of elements in H. */
-<<<<<<< HEAD
 size_t
 hash_size (struct hash *h) {
 	return h->elem_cnt;
-=======
 /**
  * @brief 해시 테이블의 요소 수를 반환합니다.
  *
@@ -344,7 +332,6 @@ hash_size (struct hash *h) {
  */
 size_t hash_size(struct hash *h) {
     return h->elem_cnt;
->>>>>>> b1f7c46 (dfdf)
 }
 
 /* Returns true if H contains no elements, false otherwise. */
@@ -462,7 +449,6 @@ rehash (struct hash *h) {
 	if (new_bucket_cnt == old_bucket_cnt)
 		return;
 
-<<<<<<< HEAD
 	/* Allocate new buckets and initialize them as empty. */
 	new_buckets = malloc (sizeof *new_buckets * new_bucket_cnt);
 	if (new_buckets == NULL) {
@@ -473,7 +459,6 @@ rehash (struct hash *h) {
 	}
 	for (i = 0; i < new_bucket_cnt; i++)
 		list_init (&new_buckets[i]);
-=======
     /* Allocate new buckets and initialize them as empty. */
     new_buckets = malloc(sizeof *new_buckets * new_bucket_cnt);
     if (new_buckets == NULL) {
@@ -486,7 +471,6 @@ rehash (struct hash *h) {
         return;
     }
     for (i = 0; i < new_bucket_cnt; i++) list_init(&new_buckets[i]);
->>>>>>> b1f7c46 (dfdf)
 
 	/* Install new bucket info. */
 	h->buckets = new_buckets;
