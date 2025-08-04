@@ -91,14 +91,18 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
-
 	//	$feat/timer_sleep
 	/** @brief 스레드를 깨울 tick 시각 초기화 시 0*/
 	uint64_t wake_tick;
 	//	feat/timer_sleep
 
+	struct lock* wait_on_lock;
+	struct list* donations;
+	
+
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
+	struct list_elem d_elem;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
