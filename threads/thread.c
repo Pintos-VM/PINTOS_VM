@@ -207,6 +207,7 @@ thread_create (const char *name, int priority,
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
 
+	list_init(&t->donations);
 	/* Add to run queue. */
 	thread_unblock (t);
 	thread_yield();
@@ -411,7 +412,17 @@ thread_set_priority (int new_priority) {
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) {
-	return thread_current ()->priority;
+	struct thread* t = thread_current ();
+	
+	if(list_empty(&t->donations)){
+		return t->priority;
+	}
+	else{
+		struct list_elem *elem =list_end(&t->donations);
+		struct thread* t = list_entry(elem,struct thread, d_elem);
+		
+		return t->priority;
+	}
 }
 
 /* Sets the current thread's nice value to NICE. */

@@ -97,7 +97,7 @@ struct thread {
 	//	feat/timer_sleep
 
 	struct lock* wait_on_lock;
-	struct list* donations;
+	struct list donations;
 	
 
 	/* Shared between thread.c and synch.c. */
