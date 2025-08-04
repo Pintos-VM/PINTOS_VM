@@ -151,6 +151,7 @@ void thread_awake(void);
 bool thread_priority_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 // feat/thread_priority_less
 
+int donations_get_priority(struct thread * t);
 int thread_get_priority (void);
 void thread_set_priority (int);
 

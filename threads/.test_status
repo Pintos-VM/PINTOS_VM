@@ -1,6 +1,6 @@
 mlfqs-fair-20 FAIL
 priority-donate-multiple FAIL
-priority-donate-one FAIL
+priority-donate-one PASS
 priority-donate-lower FAIL
 mlfqs-nice-2 FAIL
 priority-preempt FAIL
