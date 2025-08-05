@@ -31,7 +31,7 @@
 #include <string.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-
+void donate_priority(struct thread *donor);
 void donations_remove(struct lock *lock);
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -197,22 +197,18 @@ void lock_acquire(struct lock *lock)
 
 	struct thread *curr = thread_current();
 
-	// 만약 lock이 다른 스레드에게 이미 점유되어 있다면
 	if (lock->holder != NULL && lock->holder->priority < curr->priority)
 	{
 		curr->wait_on_lock = lock;
 		list_insert_ordered(&lock->holder->donations, &curr->d_elem, thread_priority_less, NULL);
-		donations_set_priority(lock->holder);
+		donate_priority(curr);  // 재귀적 donation 전달
 	}
 
-	// 세마포어를 기다린다 (block될 수 있음)
 	sema_down(&lock->semaphore);
 
-	// lock 획득 이후
 	curr->wait_on_lock = NULL;
 	lock->holder = curr;
 }
-
 /* Tries to acquires LOCK and returns true if successful or false
    on failure.  The lock must not already be held by the current
    thread.
@@ -370,4 +366,19 @@ void donations_remove(struct lock *lock)
 
 	// 💡 우선순위 복원 추가
 	// donations_set_priority(holder);
+}
+
+
+void donate_priority(struct thread *donor)
+{
+	struct thread * curr = donor;
+	
+	while (curr->wait_on_lock){
+		struct thread* holder = curr->wait_on_lock->holder;
+		if (holder == NULL) break;
+		if (holder->priority >= curr->priority) break;
+
+		holder->priority = curr->priority;
+		curr = holder;
+	}
 }

@@ -7,9 +7,9 @@ priority-preempt FAIL
 alarm-simultaneous PASS
 priority-donate-chain FAIL
 priority-condvar FAIL
-priority-donate-nest FAIL
+priority-donate-nest PASS
 alarm-single PASS
-priority-donate-multiple2 FAIL
+priority-donate-multiple2 PASS
 mlfqs-load-avg FAIL
 alarm-priority PASS
 mlfqs-block FAIL

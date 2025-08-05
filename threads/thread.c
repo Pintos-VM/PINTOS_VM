@@ -64,8 +64,6 @@ static void do_schedule(int status);
 static void schedule(void);
 static tid_t allocate_tid(void);
 
-
-
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -428,6 +426,8 @@ void donations_set_priority(struct thread *t) {
         }
     }
 }
+
+
 int thread_get_priority(void)
 {
 	return thread_current()->priority;
