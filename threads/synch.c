@@ -32,6 +32,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+void donations_remove(struct lock *lock);
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -41,6 +42,7 @@
 
    - up or "V": increment the value (and wake up one waiting
    thread, if any). */
+
 void sema_init(struct semaphore *sema, unsigned value)
 {
 	ASSERT(sema != NULL);
@@ -92,7 +94,7 @@ bool sema_try_down(struct semaphore *sema)
 	old_level = intr_disable();
 	if (sema->value > 0)
 	{
-		// sema->value--;
+		sema->value--;
 		success = true;
 	}
 	else
@@ -193,17 +195,22 @@ void lock_acquire(struct lock *lock)
 	ASSERT(!intr_context());
 	ASSERT(!lock_held_by_current_thread(lock));
 
-	bool sucess = sema_try_down(&lock->semaphore);
-	if (sucess)
+	struct thread *curr = thread_current();
+
+	// 만약 lock이 다른 스레드에게 이미 점유되어 있다면
+	if (lock->holder != NULL && lock->holder->priority < curr->priority)
 	{
-		lock->holder = thread_current();
-		sema_down(&lock->semaphore);
+		curr->wait_on_lock = lock;
+		list_insert_ordered(&lock->holder->donations, &curr->d_elem, thread_priority_less, NULL);
+		donations_set_priority(lock->holder);
 	}
-	else
-	{
-		list_insert_ordered(&lock->holder->donations, &thread_current()->d_elem, thread_priority_less, NULL);
-		sema_down(&lock->semaphore);
-	}
+
+	// 세마포어를 기다린다 (block될 수 있음)
+	sema_down(&lock->semaphore);
+
+	// lock 획득 이후
+	curr->wait_on_lock = NULL;
+	lock->holder = curr;
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -233,17 +240,13 @@ bool lock_try_acquire(struct lock *lock)
    handler. */
 void lock_release(struct lock *lock)
 {
-	struct thread *next_holder;
 	ASSERT(lock != NULL);
 	ASSERT(lock_held_by_current_thread(lock));
 
-	list_init(&lock->holder->donations);
+	donations_remove(lock);
+	donations_set_priority(thread_current());
 	lock->holder = NULL;
-	if (!list_empty(&lock->semaphore.waiters))
-	{
-		next_holder = list_entry(list_front(&lock->semaphore.waiters), struct thread, elem);
-		lock->holder = next_holder;
-	}
+
 	sema_up(&lock->semaphore);
 
 	thread_yield();
@@ -345,4 +348,26 @@ void cond_broadcast(struct condition *cond, struct lock *lock)
 
 	while (!list_empty(&cond->waiters))
 		cond_signal(cond, lock);
+}
+
+void donations_remove(struct lock *lock)
+{
+	struct thread *holder = lock->holder;
+	struct list_elem *elem = list_begin(&holder->donations);
+	struct list_elem *next_elem;
+
+	while (elem != list_end(&holder->donations))
+	{
+		next_elem = list_next(elem);
+		struct thread *elem_t = list_entry(elem, struct thread, d_elem);
+
+		if (elem_t->wait_on_lock == lock)
+		{
+			list_remove(elem);
+		}
+		elem = next_elem;
+	}
+
+	// 💡 우선순위 복원 추가
+	// donations_set_priority(holder);
 }

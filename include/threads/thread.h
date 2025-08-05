@@ -91,6 +91,7 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
+	int init_priority;					/* 원래 우선순위 */
 	//	$feat/timer_sleep
 	/** @brief 스레드를 깨울 tick 시각 초기화 시 0*/
 	uint64_t wake_tick;
@@ -151,7 +152,7 @@ void thread_awake(void);
 bool thread_priority_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 // feat/thread_priority_less
 
-int donations_get_priority(struct thread * t);
+void donations_set_priority(struct thread * t);
 int thread_get_priority (void);
 void thread_set_priority (int);
 

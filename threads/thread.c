@@ -65,6 +65,7 @@ static void schedule(void);
 static tid_t allocate_tid(void);
 
 
+
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -409,33 +410,27 @@ void thread_set_priority(int new_priority)
 }
 
 /* Returns the current thread's priority. */
-int donations_get_priority(struct thread* t)
-{
-	if (list_empty(&t->donations))
-	{
-		return t->priority;
-	}
-	else
-	{
-		struct list_elem *elem = list_front(&t->donations);
-		struct thread *pront_t = list_entry(elem, struct thread, d_elem);
-		return pront_t->priority;
-	}
+void donations_set_priority(struct thread *t) {
+    ASSERT(t != NULL);
+
+    // 우선 원래 priority로 복원
+    t->priority = t->init_priority;
+
+    // donations 리스트가 비어 있지 않다면
+    if (!list_empty(&t->donations)) {
+        struct thread *donor = list_entry(
+            list_max(&t->donations, thread_priority_less, NULL),
+            struct thread, d_elem);
+
+        // 가장 높은 priority 기부자와 비교해서 더 높으면 대체
+        if (donor->priority > t->priority) {
+            t->priority = donor->priority;
+        }
+    }
 }
 int thread_get_priority(void)
 {
-	struct thread* t = thread_current();
-
-	if (list_empty(&t->donations))
-	{
-		return t->priority;
-	}
-	else
-	{
-		struct list_elem *elem = list_front(&t->donations);
-		struct thread *pront_t = list_entry(elem, struct thread, d_elem);
-		return pront_t->priority;
-	}
+	return thread_current()->priority;
 }
 /* Sets the current thread's nice value to NICE. */
 void thread_set_nice(int nice UNUSED)
@@ -529,6 +524,8 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->tf.rsp = (uint64_t)t + PGSIZE - sizeof(void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+
+	t->init_priority = t->priority;
 
 	list_init(&t->donations);
 }
