@@ -116,8 +116,11 @@ void sema_up(struct semaphore *sema)
 
 	old_level = intr_disable();
 	if (!list_empty(&sema->waiters))
+	{
+		list_sort(&sema->waiters, thread_priority_less, NULL);
 		thread_unblock(list_entry(list_pop_front(&sema->waiters),
 								  struct thread, elem));
+	}
 	sema->value++;
 	intr_set_level(old_level);
 
@@ -203,7 +206,7 @@ void lock_acquire(struct lock *lock)
 	{
 		curr->wait_on_lock = lock;
 		list_insert_ordered(&lock->holder->donations, &curr->d_elem, thread_priority_less, NULL);
-		donate_priority(curr);  // 재귀적 donation 전달
+		donate_priority(curr); // 재귀적 donation 전달
 	}
 
 	sema_down(&lock->semaphore);
@@ -246,8 +249,6 @@ void lock_release(struct lock *lock)
 	lock->holder = NULL;
 
 	sema_up(&lock->semaphore);
-
-	
 }
 
 /* Returns true if the current thread holds LOCK, false
@@ -370,15 +371,17 @@ void donations_remove(struct lock *lock)
 	// donations_set_priority(holder);
 }
 
-
 void donate_priority(struct thread *donor)
 {
-	struct thread * curr = donor;
-	
-	while (curr->wait_on_lock){
-		struct thread* holder = curr->wait_on_lock->holder;
-		if (holder == NULL) break;
-		if (holder->priority >= curr->priority) break;
+	struct thread *curr = donor;
+
+	while (curr->wait_on_lock)
+	{
+		struct thread *holder = curr->wait_on_lock->holder;
+		if (holder == NULL)
+			break;
+		if (holder->priority >= curr->priority)
+			break;
 
 		holder->priority = curr->priority;
 		curr = holder;
