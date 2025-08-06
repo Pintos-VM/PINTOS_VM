@@ -21,7 +21,7 @@ mlfqs-load-60 FAIL
 mlfqs-fair-2 FAIL
 priority-change PASS
 alarm-negative PASS
-priority-donate-sema FAIL
+priority-donate-sema PASS
 alarm-multiple PASS
 mlfqs-load-1 FAIL
 mlfqs-nice-10 FAIL
