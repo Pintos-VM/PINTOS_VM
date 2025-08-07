@@ -654,6 +654,8 @@ static bool validate_segment(const struct Phdr *phdr, struct file *file) {
     /* It's okay. */
     return true;
 }
+static bool install_page(void *upage, void *kpage, bool writable);
+
 
 #ifndef VM
 /* Codes of this block will be ONLY USED DURING project 2.
@@ -661,7 +663,7 @@ static bool validate_segment(const struct Phdr *phdr, struct file *file) {
  * outside of #ifndef macro. */
 
 /* load() helpers. */
-static bool install_page(void *upage, void *kpage, bool writable);
+
 
 /* Loads a segment starting at offset OFS in FILE at address
  * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
@@ -743,6 +745,12 @@ static bool setup_stack(struct intr_frame *if_) {
  * with palloc_get_page().
  * Returns true on success, false if UPAGE is already mapped or
  * if memory allocation fails. */
+
+
+
+
+#else
+
 static bool install_page(void *upage, void *kpage, bool writable) {
     struct thread *t = thread_current();
 
@@ -751,7 +759,6 @@ static bool install_page(void *upage, void *kpage, bool writable) {
     return (pml4_get_page(t->pml4, upage) == NULL &&
             pml4_set_page(t->pml4, upage, kpage, writable));
 }
-
 /**
  * @brief 사용자 스택에 데이터를 푸시(push)합니다.
  *
@@ -846,7 +853,6 @@ static uint64_t *pop_stack(size_t size, struct intr_frame *if_) {
     return if_->rsp;
 }
 
-#else
 /* From here, codes will be used after project 3.
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
