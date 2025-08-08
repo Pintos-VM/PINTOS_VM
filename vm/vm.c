@@ -63,9 +63,8 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
         page->writable = writable;
         /* TODO: Insert the page into the spt. */
 
-        //1.
-        
-        
+
+        return true;
     }
 
 err:
@@ -120,13 +119,15 @@ static struct frame *vm_evict_frame(void) {
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
- * and return it. This always return valid address. That is, if the user pool
- * memory is full, this function evicts the frame to get the available memory
- * space.*/
+  and return it. This always return valid address. That is, if the user pool
+  memory is full, this function evicts the frame to get the available memory
+  space.*/
 static struct frame *vm_get_frame(void) {
     struct frame *frame = NULL;
     /* TODO: Fill this function. */
-
+    if(frame->kva = palloc_get_page(PAL_USER | PAL_ZERO) == NULL)
+        return NULL;
+    PANIC ("todo");
     ASSERT(frame != NULL);
     ASSERT(frame->page == NULL);
     return frame;
@@ -142,10 +143,13 @@ static bool vm_handle_wp(struct page *page UNUSED) {}
 bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED, bool user UNUSED,
                          bool write UNUSED, bool not_present UNUSED) {
     struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
-    struct page *page = NULL;
+    struct page *page = spt_find_page(spt,addr);
+    
     /* TODO: Validate the fault */
+    if(page != NULL)
+        
     /* TODO: Your code goes here */
-
+    
     return vm_do_claim_page(page);
 }
 
@@ -157,9 +161,10 @@ void vm_dealloc_page(struct page *page) {
 }
 
 /* Claim the page that allocate on VA. */
-bool vm_claim_page(void *va UNUSED) {
+bool vm_claim_page(void *va ) {
     struct page *page = NULL;
     /* TODO: Fill this function */
+    page = spt_find_page(&thread_current()->spt,va);
 
     return vm_do_claim_page(page);
 }
@@ -173,7 +178,7 @@ static bool vm_do_claim_page(struct page *page) {
     page->frame = frame;
 
     /* TODO: Insert page table entry to map page's VA to frame's PA. */
-
+    pml4_set_page(thread_current()->pml4,page->va,frame->kva,page->writable);
     return swap_in(page, frame->kva);
 }
 
