@@ -5,6 +5,7 @@
 #include "threads/malloc.h"
 #include "vm/inspect.h"
 #include "threads/mmu.h"
+ 
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -49,14 +50,24 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
     struct supplemental_page_table *spt = &thread_current()->spt;
 
     /* Check wheter the upage is already occupied or not. */
+    
     if (spt_find_page(spt, upage) == NULL) {
+        
         
         /* TODO: Create the page, fetch the initialier according to the VM type,
          * TODO: and then create "uninit" page struct by calling uninit_new. You
          * TODO: should modify the field after calling the uninit_new. */
-
+        struct page* page = malloc(sizeof(struct page));
+        uninit_new(page,upage,init,type,aux, anon_initializer);
+        
+        page->writable = writable;
         /* TODO: Insert the page into the spt. */
+
+        //1.
+        
+        
     }
+
 err:
     return false;
 }

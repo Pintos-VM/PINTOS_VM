@@ -51,6 +51,14 @@ struct init_data {
     const char *file_name;
 };
 
+/* custom structure */
+struct lazy_read_file {
+    struct file *file;
+    off_t ofs;
+    size_t page_read_bytes;
+    size_t page_zero_bytes;
+};
+
 /* General process initializer for initd and other process. */
 static void process_init(void) {
     struct thread *current = thread_current();
@@ -656,62 +664,88 @@ static bool validate_segment(const struct Phdr *phdr, struct file *file) {
 }
 static bool install_page(void *upage, void *kpage, bool writable);
 
-
 #ifndef VM
 /* Codes of this block will be ONLY USED DURING project 2.
- * If you want to implement the function for whole project 2, implement it
- * outside of #ifndef macro. */
+  If you want to implement the function for whole project 2, implement it
+  outside of #ifndef macro. */
 
 /* load() helpers. */
 
-
 /* Loads a segment starting at offset OFS in FILE at address
- * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
- * memory are initialized, as follows:
- *
- * - READ_BYTES bytes at UPAGE must be read from FILE
- * starting at offset OFS.
- *
- * - ZERO_BYTES bytes at UPAGE + READ_BYTES must be zeroed.
- *
- * The pages initialized by this function must be writable by the
- * user process if WRITABLE is true, read-only otherwise.
- *
- * Return true if successful, false if a memory allocation error
- * or disk read error occurs. */
+  UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
+  memory are initialized, as follows:
+
+  - READ_BYTES bytes at UPAGE must be read from FILE
+  starting at offset OFS.
+
+  - ZERO_BYTES bytes at UPAGE + READ_BYTES must be zeroed.
+
+  The pages initialized by this function must be writable by the
+  user process if WRITABLE is true, read-only otherwise.
+
+  Return true if successful, false if a memory allocation error
+  or disk read error occurs. */
 static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t read_bytes,
                          uint32_t zero_bytes, bool writable) {
     ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
+    /*
+    read_bytes : 파일에서 실제로 읽어올 바이트 수(예: 코드, 데이터, segment)
+    zero_bytes : 파일에서 안 읽고 0으로 채워야 할 바이트 수 (예: BSS segment)
+    PGSIZE : 1 페이지 크기(4096 bytes)
+    */
     ASSERT(pg_ofs(upage) == 0);
+    /*
+    pg_ofs(upage) == 0: 주어진 upage 가 사직 주소인지 확인 하는함수
+    함수 내부로 들어가보면 페이지 범위인  (1 << 12)-1 이 공간을 구하는 걸 볼 수 있는데,
+    그렇다면 이 어썰트 문맥은 upage 의 12비트까지를 잘라서 봤을 때, 0이 아니라면,
+    page의 시작주소가 아니라는 판단을 하는것.
+    */
     ASSERT(ofs % PGSIZE == 0);
+    /*
+    ofs % PGSIZE
+    - ofs는 파일 내에서 읽기 시작할 위치
+    - 즉, ELF 실행파일에서 이 segment의 데이터가 시작되는 offset
+    - 왜 pgsize 단위여야 함?
+    - 페이지 단위로 메모리를 할당하고 매핑하니까.
+    */
 
-    file_seek(file, ofs);
+    file_seek(file, ofs);  // file 의 offset을 재지정 해주는 함수
+
     while (read_bytes > 0 || zero_bytes > 0) {
         /* Do calculate how to fill this page.
          * We will read PAGE_READ_BYTES bytes from FILE
          * and zero the final PAGE_ZERO_BYTES bytes. */
         size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
+        // 읽을 bytes 와 0으로 채울 bytes를 계산.
 
         /* Get a page of memory. */
+        // 유저풀 공간 페이지 할당
         uint8_t *kpage = palloc_get_page(PAL_USER);
         if (kpage == NULL)
             return false;
 
         /* Load this page. */
+        // 파일 을 page_read_bytes 만큼 kpage에 읽어오기
+        // 실제 읽어온 bytes가 page_read_bytes와 같은지 체크
+        // 같지 않으면 페이지 해제하고 false 리턴
         if (file_read(file, kpage, page_read_bytes) != (int)page_read_bytes) {
             palloc_free_page(kpage);
             return false;
         }
+        // 멤셋으로 페이지 남은 bytes 0으로 채우기
         memset(kpage + page_read_bytes, 0, page_zero_bytes);
 
+        //
         /* Add the page to the process's address space. */
+        // 인자로 받아온 upage (pml4 인덱스라고 생각하자) 이것으로 pml4_walk 해서 해당 pte에 설정
+        // 매핑 시키는 함수
         if (!install_page(upage, kpage, writable)) {
             printf("fail\n");
             palloc_free_page(kpage);
             return false;
         }
-
+        //
         /* Advance. */
         read_bytes -= page_read_bytes;
         zero_bytes -= page_zero_bytes;
@@ -746,16 +780,12 @@ static bool setup_stack(struct intr_frame *if_) {
  * Returns true on success, false if UPAGE is already mapped or
  * if memory allocation fails. */
 
-
-
-
 #else
 
 static bool install_page(void *upage, void *kpage, bool writable) {
     struct thread *t = thread_current();
 
-    /* Verify that there's not already a page at that virtual
-     * address, then map our page there. */
+    /* Verify that there's not already a page at that virtual address, then map our page there. */
     return (pml4_get_page(t->pml4, upage) == NULL &&
             pml4_set_page(t->pml4, upage, kpage, writable));
 }
@@ -858,9 +888,25 @@ static uint64_t *pop_stack(size_t size, struct intr_frame *if_) {
  * upper block. */
 
 static bool lazy_load_segment(struct page *page, void *aux) {
-    /* TODO: Load the segment from the file */
-    /* TODO: This called when the first page fault occurs on address VA. */
-    /* TODO: VA is available when calling this function. */
+    
+    struct lazy_read_file* lrf = aux;
+    uint8_t *kpage = palloc_get_page(PAL_USER);
+    if (kpage == NULL)
+        return false;
+    
+    if(file_read(lrf->file, kpage, lrf->page_read_bytes) != lrf->page_read_bytes){
+        palloc_free_page(kpage);
+        return false;
+    }
+    memset(kpage + lrf->page_read_bytes, 0, lrf->page_zero_bytes);
+
+    if(!install_page(page->va,kpage, page->writable)){
+        printf("fail\n");
+        palloc_free_page(kpage);
+        return false;
+    }
+    return true;
+    
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -880,18 +926,25 @@ static bool lazy_load_segment(struct page *page, void *aux) {
 static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t read_bytes,
                          uint32_t zero_bytes, bool writable) {
     ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
-    ASSERT(pg_ofs(upage) == 0);
+    ASSERT(pg_ofs(upage) == 0);         
     ASSERT(ofs % PGSIZE == 0);
 
     while (read_bytes > 0 || zero_bytes > 0) {
         /* Do calculate how to fill this page.
-         * We will read PAGE_READ_BYTES bytes from FILE
-         * and zero the final PAGE_ZERO_BYTES bytes. */
+          We will read PAGE_READ_BYTES bytes from FILE
+          and zero the final PAGE_ZERO_BYTES bytes. */
         size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
         /* TODO: Set up aux to pass information to the lazy_load_segment. */
-        void *aux = NULL;
+        struct lazy_read_file lrf;
+        lrf.file = file;
+        lrf.ofs = ofs;
+        lrf.page_read_bytes = page_read_bytes;
+        lrf.page_zero_bytes = page_zero_bytes;
+
+        void *aux = &lrf;
+
         if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable, lazy_load_segment, aux))
             return false;
 
