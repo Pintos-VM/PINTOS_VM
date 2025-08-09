@@ -24,9 +24,24 @@
 #include "userprog/check_perm.h"
 #include "userprog/gdt.h"
 #include "userprog/tss.h"
+
 #ifdef VM
 #include "vm/vm.h"
 #endif
+
+void print_intr_frame(const char *label, struct intr_frame *f) {
+    msg("[IntrFrame] %s\n", label);
+    msg("  rip    = 0x%016" PRIx64 "\n", f->rip);
+    msg("  rsp    = 0x%016" PRIx64 "\n", f->rsp);
+    msg("  rflags = 0x%016" PRIx64 "\n", f->eflags);
+    msg("  rdi    = 0x%016" PRIx64 "\n", f->R.rdi);
+    msg("  rsi    = 0x%016" PRIx64 "\n", f->R.rsi);
+    msg("  rdx    = 0x%016" PRIx64 "\n", f->R.rdx);
+    msg("  rcx    = 0x%016" PRIx64 "\n", f->R.rcx);
+    msg("  r8     = 0x%016" PRIx64 "\n", f->R.r8);
+    msg("  r9     = 0x%016" PRIx64 "\n", f->R.r9);
+    // 필요하다면 추가 레지스터 출력 가능
+}
 
 static void process_cleanup(void);
 static bool load(const char *file_name, char *args, struct intr_frame *if_);
@@ -294,6 +309,7 @@ static void __do_fork(void *aux) {
     /* Finally, switch to the newly created process. */
     if (succ) {
         sema_up(&(current->parent->fork_sema));
+
         do_iret(&if_);
     }
 error:
@@ -332,6 +348,7 @@ int process_exec(void *f_name) {
     }
 
     /* Start switched process. */
+    // print_intr_frame("Before do_iret", &_if);
     do_iret(&_if);
     NOT_REACHED();
 }
@@ -578,7 +595,7 @@ static bool load(const char *file_name, char *args, struct intr_frame *if_) {
 
     /* Start address. */
     if_->rip = ehdr.e_entry;
-
+    // msg("ELF entry point: 0x%lx\n", (unsigned long)ehdr.e_entry);
     //  $feat/arg-parse
     char *argv[LOADER_ARGS_LEN / 2];
     uintptr_t stack_ptr[LOADER_ARGS_LEN / 2];
@@ -888,25 +905,20 @@ static uint64_t *pop_stack(size_t size, struct intr_frame *if_) {
  * upper block. */
 
 static bool lazy_load_segment(struct page *page, void *aux) {
-    
-    struct lazy_read_file* lrf = aux;
-    uint8_t *kpage = palloc_get_page(PAL_USER);
-    if (kpage == NULL)
+    struct lazy_read_file *lrf = aux;
+    if (page->frame->kva == NULL) {
         return false;
-    
-    if(file_read(lrf->file, kpage, lrf->page_read_bytes) != lrf->page_read_bytes){
+    }
+    void* kpage = page->frame->kva;
+    file_seek(lrf->file,lrf->ofs);
+    if (file_read(lrf->file, kpage, lrf->page_read_bytes) != lrf->page_read_bytes) {
         palloc_free_page(kpage);
         return false;
     }
     memset(kpage + lrf->page_read_bytes, 0, lrf->page_zero_bytes);
-
-    if(!install_page(page->va,kpage, page->writable)){
-        printf("fail\n");
-        palloc_free_page(kpage);
-        return false;
-    }
-    return true;
     
+    free(lrf);
+    return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -926,7 +938,7 @@ static bool lazy_load_segment(struct page *page, void *aux) {
 static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t read_bytes,
                          uint32_t zero_bytes, bool writable) {
     ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
-    ASSERT(pg_ofs(upage) == 0);         
+    ASSERT(pg_ofs(upage) == 0);
     ASSERT(ofs % PGSIZE == 0);
 
     while (read_bytes > 0 || zero_bytes > 0) {
@@ -937,13 +949,13 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
         /* TODO: Set up aux to pass information to the lazy_load_segment. */
-        struct lazy_read_file lrf;
-        lrf.file = file;
-        lrf.ofs = ofs;
-        lrf.page_read_bytes = page_read_bytes;
-        lrf.page_zero_bytes = page_zero_bytes;
+        struct lazy_read_file *lrf = calloc(1, sizeof(struct lazy_read_file));
+        lrf->file = file;
+        lrf->ofs = ofs;
+        lrf->page_read_bytes = page_read_bytes;
+        lrf->page_zero_bytes = page_zero_bytes;
 
-        void *aux = &lrf;
+        void *aux = lrf;
 
         if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable, lazy_load_segment, aux))
             return false;
@@ -952,6 +964,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
         read_bytes -= page_read_bytes;
         zero_bytes -= page_zero_bytes;
         upage += PGSIZE;
+        ofs += page_read_bytes;
     }
     return true;
 }
@@ -961,11 +974,27 @@ static bool setup_stack(struct intr_frame *if_) {
     bool success = false;
     void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 
-    /* TODO: Map the stack on stack_bottom and claim the page immediately.
-     * TODO: If success, set the rsp accordingly.
-     * TODO: You should mark the page is stack. */
-    /* TODO: Your code goes here */
+    /* 할 일: stack_bottom에 스택을 매핑하고 즉시 페이지를 요청합니다.
+     * 할 일: 성공하면 그에 따라 rsp를 설정하세요.
+     * 할 일: 페이지가 스택임을 표시해야 합니다. */
+    /* TODO: 코드가 여기에 있습니다 */
+    void *upage = pg_round_down(stack_bottom);
 
+    if (!vm_alloc_page_with_initializer(VM_ANON, upage, true, NULL, NULL)) {
+        return false;
+    }
+    struct page *p = spt_find_page(&thread_current()->spt, upage);
+    if (p == NULL) {
+        return false;
+    }
+
+    if (!vm_claim_page(upage)) {
+        return false;
+    }
+    if_->rsp = USER_STACK;
+    p->is_stack = true;
+
+    success = true;
     return success;
 }
 #endif /* VM */
