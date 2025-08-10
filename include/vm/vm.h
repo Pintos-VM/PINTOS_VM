@@ -35,7 +35,10 @@ enum vm_type {
 struct page_operations;
 struct thread;
 
-#define VM_TYPE(type) ((type) & 7)
+struct anon_aux;
+struct file_aux;
+
+#define VM_TYPE(type) ((type)&7)
 
 /* The representation of "page".
  * This is kind of "parent class", which has four "child class"es, which are
@@ -47,6 +50,7 @@ struct page {
     struct frame *frame; /* Back reference for frame */
 
     /* Your implementation */
+    bool writable;
 
     /* Per-type data are binded into the union.
      * Each function automatically detects the current union */
