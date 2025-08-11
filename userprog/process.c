@@ -424,6 +424,7 @@ static void process_cleanup(void) {
         curr->pml4 = NULL;
         pml4_activate(NULL);
         pml4_destroy(pml4);
+        
     }
 }
 

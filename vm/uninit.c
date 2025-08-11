@@ -52,11 +52,14 @@ static bool uninit_initialize(struct page *page, void *kva) {
 }
 
 /* Free the resources hold by uninit_page. Although most of pages are transmuted
- * to other page objects, it is possible to have uninit pages when the process
- * exit, which are never referenced during the execution.
- * PAGE will be freed by the caller. */
+ to other page objects, it is possible to have uninit pages when the process
+ exit, which are never referenced during the execution.
+ PAGE will be freed by the caller. */
 static void uninit_destroy(struct page *page) {
     struct uninit_page *uninit UNUSED = &page->uninit;
+    
     /* TODO: Fill this function.
-     * TODO: If you don't have anything to do, just return. */
+    * TODO: If you don't have anything to do, just return. */
+    free(page);
 }
+

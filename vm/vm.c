@@ -20,6 +20,7 @@ void vm_init(void) {
 }
 static unsigned page_hash(const struct hash_elem *p_, void *aux UNUSED);
 static bool page_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED);
+static void hash_elem_destructor(struct hash_elem* he, void* aux);
 
 /* Get the type of the page. This function is useful if you want to know the
  * type of the page after it will be initialized.
@@ -262,6 +263,7 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED) {
      * TODO: writeback all the modified contents to the storage. */
     // hash_clear(&spt->spt_hash_table, 구현한 hash_action_func);
     // 모든콘텐츠 저장소에 다시쓰기 미구현
+    hash_clear(&spt->spt_hash_table, hash_elem_destructor);
 }
 
 /* Returns a hash value for page p. */
@@ -275,4 +277,12 @@ static bool page_less(const struct hash_elem *a_, const struct hash_elem *b_, vo
     const struct page *b = hash_entry(b_, struct page, hash_elem);
 
     return a->va < b->va;
+}
+
+static void hash_elem_destructor(struct hash_elem* he, void* aux){
+    struct page* p = hash_entry(he,struct page, hash_elem);
+    if(p->frame != NULL){
+        free(p->frame);
+    }
+    free(p);
 }

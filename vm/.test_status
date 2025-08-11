@@ -9,7 +9,7 @@ args-multiple PASS
 create-normal PASS
 bad-write PASS
 open-twice PASS
-exec-arg FAIL
+exec-arg PASS
 exec-missing PASS
 read-bad-ptr PASS
 create-long PASS
@@ -34,7 +34,7 @@ read-stdout PASS
 wait-bad-pid PASS
 pt-grow-bad FAIL
 pt-grow-stk-sc FAIL
-exec-read FAIL
+exec-read PASS
 read-boundary PASS
 wait-twice FAIL
 exec-boundary FAIL
@@ -56,7 +56,7 @@ multi-child-fd FAIL
 exit PASS
 write-bad-ptr PASS
 wait-simple FAIL
-exec-once FAIL
+exec-once PASS
 args-many PASS
 fork-read PASS
 write-zero PASS
