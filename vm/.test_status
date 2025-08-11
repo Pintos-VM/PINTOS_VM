@@ -1,2 +1,7 @@
+pt-write-code PASS
+alarm-single PASS
+pt-write-code2 FAIL
 args-none PASS
 create-bad-ptr FAIL
+pt-grow-stk-sc FAIL
+pt-grow-stack FAIL

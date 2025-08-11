@@ -129,7 +129,7 @@ static struct frame *vm_get_frame(void) {
     frame->page = NULL;
     if (frame == NULL)
         return NULL;
-    if ((frame->kva = palloc_get_page(PAL_USER | PAL_ZERO))== NULL)
+    if ((frame->kva = palloc_get_page(PAL_USER | PAL_ZERO)) == NULL)
         return NULL;
     // PANIC("todo");
     ASSERT(frame != NULL);
@@ -137,8 +137,22 @@ static struct frame *vm_get_frame(void) {
     return frame;
 }
 
+//
 /* Growing the stack. */
-static void vm_stack_growth(void *addr UNUSED) {}
+static void vm_stack_growth(void *addr) {
+    uint64_t page_addr = pg_round_down(addr);
+    uint64_t prev_addr = page_addr - PGSIZE;
+    struct page *prev_page;
+    if (prev_addr < USER_STACK && prev_addr > (USER_STACK - (1 << 20)) &&
+        (prev_page = spt_find_page(&thread_current()->spt, prev_addr)) == NULL) {
+        if (prev_page->operations->type & VM_STACK &&
+            vm_alloc_page_with_initializer(VM_ANON | VM_STACK, page_addr, true, NULL, NULL)) {
+            if (!vm_claim_page(addr)) {
+                msg("stack_grows error");
+            }
+        }
+    }
+}
 
 /* Handle the fault on write_protected page */
 static bool vm_handle_wp(struct page *page UNUSED) {}
@@ -153,6 +167,9 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED, bool us
     if (page != NULL)
         /* TODO: Your code goes here */
         return vm_do_claim_page(page);
+    else {
+        vm_stack_growth(addr);
+    }
 }
 
 /* Free the page.
@@ -180,7 +197,7 @@ static bool vm_do_claim_page(struct page *page) {
     page->frame = frame;
 
     /* TODO: Insert page table entry to map page's VA to frame's PA. */
-    if(!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable))
+    if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable))
         return false;
 
     return swap_in(page, frame->kva);
