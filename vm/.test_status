@@ -8,15 +8,15 @@ args-multiple PASS
 create-normal PASS
 bad-write PASS
 open-twice PASS
-exec-arg FAIL
 exec-missing PASS
+exec-arg FAIL
 read-bad-ptr PASS
 create-long PASS
 fork-close FAIL
 fork-boundary FAIL
-rox-multichild FAIL
 create-bound PASS
-pt-bad-read PASS
+rox-multichild FAIL
+pt-bad-read FAIL
 rox-child FAIL
 alarm-single PASS
 pt-bad-addr PASS
@@ -31,7 +31,7 @@ args-none PASS
 create-bad-ptr PASS
 read-stdout PASS
 wait-bad-pid PASS
-pt-grow-bad PASS
+pt-grow-bad FAIL
 pt-grow-stk-sc FAIL
 exec-read FAIL
 read-boundary PASS
@@ -42,7 +42,7 @@ halt PASS
 write-bad-fd PASS
 open-boundary PASS
 create-null PASS
-pt-grow-stack FAIL
+pt-grow-stack PASS
 fork-recursive FAIL
 open-bad-ptr PASS
 write-normal PASS
