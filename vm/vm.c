@@ -141,10 +141,10 @@ static struct frame *vm_get_frame(void) {
 /* Growing the stack. */
 static void vm_stack_growth(void *addr) {
     uint64_t page_addr = pg_round_down(addr);
-    uint64_t prev_addr = page_addr - PGSIZE;
+    uint64_t prev_addr = page_addr + PGSIZE;
     struct page *prev_page;
     if (prev_addr < USER_STACK && prev_addr > (USER_STACK - (1 << 20)) &&
-        (prev_page = spt_find_page(&thread_current()->spt, prev_addr)) == NULL) {
+        (prev_page = spt_find_page(&thread_current()->spt, prev_addr)) != NULL) {
         if (prev_page->operations->type & VM_STACK &&
             vm_alloc_page_with_initializer(VM_ANON | VM_STACK, page_addr, true, NULL, NULL)) {
             if (!vm_claim_page(addr)) {

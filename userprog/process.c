@@ -980,7 +980,7 @@ static bool setup_stack(struct intr_frame *if_) {
     /* TODO: 코드가 여기에 있습니다 */
     void *upage = pg_round_down(stack_bottom);
 
-    if (!vm_alloc_page_with_initializer(VM_ANON | VM_STACK, upage, true, NULL, NULL)) {
+    if (!vm_alloc_page_with_initializer((VM_ANON | VM_STACK), upage, true, NULL, NULL)) {
         return false;
     }
     struct page *p = spt_find_page(&thread_current()->spt, upage);
