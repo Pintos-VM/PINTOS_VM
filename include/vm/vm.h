@@ -7,6 +7,7 @@
 #include "vm/uninit.h"
 #include "vm/anon.h"
 #include "vm/file.h"
+#include "string.h"
 #ifdef EFILESYS
 #include "filesys/page_cache.h"
 #endif
@@ -69,6 +70,15 @@ struct page_operations {
 struct supplemental_page_table {
     struct hash spt_hash_table;
 
+};
+
+
+/* custom structure */
+struct lazy_read_file {
+    struct file *file;
+    off_t ofs;
+    size_t page_read_bytes;
+    size_t page_zero_bytes;
 };
 
 #include "threads/thread.h"

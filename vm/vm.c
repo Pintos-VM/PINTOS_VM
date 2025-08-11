@@ -177,8 +177,8 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED, bool us
                 return true;
             }
         }
+        return false;
     }
-    return false;
 }
 
 /* Free the page.
@@ -221,10 +221,39 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED) {
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
                                   struct supplemental_page_table *src UNUSED) {
     struct hash_iterator i;
-    hash_first(&i, src);
-
+    hash_first(&i, &src->spt_hash_table);
+    hash_next(&i);
     for (; i.elem != NULL; hash_next(&i)) {
+        struct page *p = hash_entry(hash_cur(&i), struct page, hash_elem);
+        struct page *new_page;
+        switch (p->operations->type) {
+            case VM_UNINIT:
+                new_page = calloc(1,sizeof(struct page));
+
+                struct lazy_read_file* lrf = calloc(1,sizeof(struct lazy_read_file));
+                memcpy(lrf,p->uninit.aux, sizeof(struct lazy_read_file));
+                uninit_new(new_page, p->va, p->uninit.init, p->uninit.type, lrf,
+                           p->uninit.page_initializer); //안되면 new_page -> p 로 바꾸기
+                hash_insert(&dst->spt_hash_table, &new_page->hash_elem);
+                break;
+            case VM_ANON:
+                if (!vm_alloc_page(p->operations->type, p->va, p->writable)) {
+                    free(new_page);
+                    return false;
+                }
+                if (!vm_claim_page(p->va)) {
+                    free(new_page);
+                    return false;
+                }
+                new_page = spt_find_page(&dst->spt_hash_table, p->va);
+                memcpy(new_page->frame->kva, p->frame->kva, PGSIZE);
+                break;
+
+            default:
+                break;
+        }
     }
+    return true;
 }
 
 /* Free the resource hold by the supplemental page table */

@@ -66,13 +66,7 @@ struct init_data {
     const char *file_name;
 };
 
-/* custom structure */
-struct lazy_read_file {
-    struct file *file;
-    off_t ofs;
-    size_t page_read_bytes;
-    size_t page_zero_bytes;
-};
+
 
 /* General process initializer for initd and other process. */
 static void process_init(void) {
@@ -416,8 +410,7 @@ static void process_cleanup(void) {
 #endif
 
     uint64_t *pml4;
-    /* Destroy the current process's page directory and switch back
-     * to the kernel-only page directory. */
+     /* to the kernel-only page directory. */
     pml4 = curr->pml4;
     if (pml4 != NULL) {
         /* Correct ordering here is crucial.  We must set
