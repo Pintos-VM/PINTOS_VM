@@ -25,6 +25,7 @@ enum vm_type {
     VM_MARKER_END = (1 << 31),
 };
 
+#include "threads/mmu.h"
 #include "vm/anon.h"
 #include "vm/file.h"
 #include "vm/uninit.h"
@@ -50,6 +51,7 @@ struct page {
     struct frame *frame; /* Back reference for frame */
 
     /* Your implementation */
+    struct thread *owner; /* 이 페이지를 소유한 스레드*/
     bool writable;
 
     /* Per-type data are binded into the union.
@@ -68,6 +70,8 @@ struct page {
 struct frame {
     void *kva;
     struct page *page;
+    struct list_elem elem;  // 리스트 연결
+    bool pinned;            // I/O 중 eviction 금지
 };
 
 /* The function table for page operations.
@@ -111,5 +115,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 void vm_dealloc_page(struct page *page);
 bool vm_claim_page(void *va);
 enum vm_type page_get_type(struct page *page);
+
+static void frame_init(void);
 
 #endif /* VM_VM_H */
