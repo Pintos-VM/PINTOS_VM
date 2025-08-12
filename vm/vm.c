@@ -5,6 +5,14 @@
 #include "threads/malloc.h"
 #include "vm/inspect.h"
 
+static struct lock frame_lock;   // 전역 락
+static struct list frame_table;  // 전역 프레임 테이블
+
+static void frame_init(void) {
+    lock_init(&frame_lock);
+    list_init(&frame_table);
+}
+
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void vm_init(void) {
@@ -17,14 +25,6 @@ void vm_init(void) {
     /* DO NOT MODIFY UPPER LINES. */
     /* TODO: Your code goes here. */
     frame_init();  // 프레임 락/테이블 초기화
-}
-
-static struct lock frame_lock;   // 전역 락
-static struct list frame_table;  // 전역 프레임 테이블
-
-static void frame_init(void) {
-    lock_init(&frame_lock);
-    list_init(&frame_table);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -49,7 +49,8 @@ static struct frame *vm_evict_frame(void);
  * page, do not create it directly and make it through this function or
  * `vm_alloc_page`. */
 bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writable,
-                                    vm_initializer *init, void *aux) {
+                                    vm_initializer *init UNUSED, void *aux) {
+    (void)*init;
     ASSERT(is_user_vaddr(upage));  // 유저 영역 주소인지 확인
     ASSERT(VM_TYPE(type) != VM_UNINIT);
     ASSERT(pg_ofs(upage) == 0);  // 페이지 정렬 보장
@@ -108,25 +109,65 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
     return true;
 }
 
-/* Find VA from spt and return page. On error, return NULL. */
-struct page *spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
-    struct page *page = NULL;
-    /* TODO: Fill this function. */
+static uint64_t spt_hash(const struct hash_elem *e, void *aux UNUSED) {
+    const struct spt_entry *se = hash_entry(e, struct spt_entry, elem);
+    return hash_bytes(&se->va, sizeof se->va);
+}
 
-    return page;
+static bool spt_less(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED) {
+    const struct spt_entry *sa = hash_entry(a, struct spt_entry, elem);
+    const struct spt_entry *sb = hash_entry(b, struct spt_entry, elem);
+    return sa->va < sb->va;
+}
+
+static void spt_destroy_elem(struct hash_elem *e, void *aux UNUSED) {
+    struct spt_entry *se = hash_entry(e, struct spt_entry, elem);
+    // page/destroy/aux 정리는 정책에 맞게
+    // destroy(se->page);
+    // free(se->page);
+    free(se);
+}
+
+/* Find VA from spt and return page. On error, return NULL. */
+struct page *spt_find_page(struct supplemental_page_table *spt, void *va) {
+    /* TODO: Fill this function. */
+    void *key_va = pg_round_down(va);
+    struct spt_entry key = {.va = key_va};
+    struct hash_elem *e = hash_find(&spt->ht, &key.elem);
+
+    return e ? hash_entry(e, struct spt_entry, elem)->page : NULL;
 }
 
 /* Insert PAGE into spt with validation. */
-bool spt_insert_page(struct supplemental_page_table *spt UNUSED, struct page *page UNUSED) {
-    int succ = false;
+bool spt_insert_page(struct supplemental_page_table *spt, struct page *page) {
     /* TODO: Fill this function. */
+    void *va = page->va;  // 주소는 반드시 페이지 경계에 있어야 함
+    struct spt_entry *se = malloc(sizeof *se);
+    if (!se) {
+        return false;
+    }
 
-    return succ;
+    se->va = va;
+    se->page = page;
+
+    struct hash_elem *old = hash_insert(&spt->ht, &se->elem);
+    if (old != NULL) {
+        free(se);
+        return false;
+    }
+    return true;
 }
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page) {
-    vm_dealloc_page(page);
-    return true;
+    struct spt_entry key = {.va = page->va};
+    struct hash_elem *e = hash_find(&spt->ht, &key.elem);
+    if (e) {
+        struct spt_entry *se = hash_entry(e, struct spt_entry, elem);
+        hash_delete(&spt->ht, e);
+        free(se);
+    }
+    // 페이지 해제는 호출자가 따로 destroy/free
+    // vm_dealloc_page(page);
 }
 
 /* Get the struct frame, that will be evicted. */
@@ -211,31 +252,86 @@ static struct frame *vm_get_frame(void) {
 }
 
 /* Growing the stack. */
-static void vm_stack_growth(void *addr UNUSED) {}
+static void vm_stack_growth(void *addr UNUSED) {
+    // TODO: 스택 성장 구현
+}
 
 /* Handle the fault on write_protected page */
-static bool vm_handle_wp(struct page *page UNUSED) {}
+static bool vm_handle_wp(struct page *page UNUSED) {
+    return false;
+}
+
+static void vm_free_frame(struct frame *fr) {
+    if (!fr) {
+        return;
+    }
+    if (fr->kva) {
+        palloc_free_page(fr->kva);
+    }
+    // frame_table에서 elem 제거 필요 시
+    // list_remove(&fr->elem);
+    free(fr);
+}
 
 /* Return true on success */
-bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED, bool user UNUSED,
-                         bool write UNUSED, bool not_present UNUSED) {
+bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write,
+                         bool not_present) {
+    // 1) 주소/컨텍스트 기본 필터
+    if (addr == NULL)
+        return false;
+
+    // 유저 영역이 아닌 주소면 SPT로 처리하지 않음
+    if (!is_user_vaddr(addr))
+        return false;
+
+    // 커널 컨텍스트에서 난 폴트면(= user == false) 여기서 끝
+
+    if (!user)
+        return false;
     struct thread *t = thread_current();
     struct supplemental_page_table *spt = &t->spt;
     void *va = pg_round_down(addr);  // 페이지 경계로 내리기
+
+    /* 2) SPT에서 조회 */
     struct page *page = spt_find_page(spt, va);
-    /* TODO: Validate the fault */
-    /* TODO: Your code goes here */
-    if (page == NULL) {
-        /* 스택 성장 조건 검사 후 anon 페이지 할당 + claim
-        return vm_stack_growth() */
-        return false;
+
+    if (page) {
+        /* 2-1) 페이지 메타는 있으나 물리 프레임 없음 -> not-present 폴트여야 정상 */
+        if (not_present) {
+            /* 실제로 들고 오기 (lazy load / zero-fill 등) */
+            return vm_claim_page(va);
+        } else {
+            /* 2-2) 권한 위반 여부 판단: 쓰기 요청인데 R/O 매핑이면 실패 */
+            if (write && !page->writable) {
+                return false;
+            }
+            return false;
+        }
     }
 
-    if (not_present && (page->frame == NULL)) {
-        return vm_do_claim_page(page);
+    /* 3) SPT 미스 -> 스택 성장 후보인지 판단 */
+    if (user) {
+        uintptr_t u_rsp = (uintptr_t)f->rsp;
+        uintptr_t u_addr = (uintptr_t)addr;
+
+        /* 스택은 하향 성장: addr <= rsp 이고, 소폭 여유 이내 접근 허용 */
+        bool near_rsp = (u_addr <= u_rsp) && (u_rsp - u_addr <= 32);
+
+        /* 최대 스택 한도/가드 정책 (1 << 20 = 1 MiB) */
+        uintptr_t max_stack = USER_STACK - (1u << 20);
+        bool within_limit = u_addr >= max_stack;
+
+        if (near_rsp && within_limit) {
+            /* 3-1) anon으로 lazy 등록 (aux 불필요) */
+            if (!vm_alloc_page_with_initializer(VM_ANON, va, true, NULL, NULL)) {
+                return false;
+            }
+
+            /* 3-2) 클레임 (프레임 확보 + 매핑) */
+            return vm_claim_page(va);
+        }
     }
 
-    // 권한 위반 등은 false
     return false;
 }
 
@@ -302,14 +398,19 @@ static bool vm_do_claim_page(struct page *page) {
 }
 
 /* Initialize new supplemental page table */
-void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED) {}
+void supplemental_page_table_init(struct supplemental_page_table *spt) {
+    hash_init(&spt->ht, spt_hash, spt_less, NULL);
+}
 
 /* Copy supplemental page table from src to dst */
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
-                                  struct supplemental_page_table *src UNUSED) {}
+                                  struct supplemental_page_table *src UNUSED) {
+    return false;
+}
 
 /* Free the resource hold by the supplemental page table */
-void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED) {
+void supplemental_page_table_kill(struct supplemental_page_table *spt) {
     /* TODO: Destroy all the supplemental_page_table hold by thread and
      * TODO: writeback all the modified contents to the storage. */
+    hash_destroy(&spt->ht, spt_destroy_elem);
 }

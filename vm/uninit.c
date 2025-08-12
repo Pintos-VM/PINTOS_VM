@@ -10,6 +10,7 @@
 
 #include "vm/uninit.h"
 
+#include "threads/malloc.h"
 #include "vm/vm.h"
 
 static bool uninit_initialize(struct page *page, void *kva);
@@ -43,12 +44,25 @@ void uninit_new(struct page *page, void *va, vm_initializer *init, enum vm_type 
 static bool uninit_initialize(struct page *page, void *kva) {
     struct uninit_page *uninit = &page->uninit;
 
-    /* Fetch first, page_initialize may overwrite the values */
-    vm_initializer *init = uninit->init;
+    vm_initializer *init = uninit->init;  // (struct page*, void*)
     void *aux = uninit->aux;
+    enum vm_type type = uninit->type;  // ← 오타 수정
 
-    /* TODO: You may need to fix this function. */
-    return uninit->page_initializer(page, uninit->type, kva) && (init ? init(page, aux) : true);
+    // 1) 타입별 객체로 전환 (ops 교체 포함)
+    if (!uninit->page_initializer(page, type, kva))
+        return false;
+
+    ASSERT(page->operations && page->operations->type != VM_UNINIT);
+
+    // 2) (옵션) 2차 초기화기
+    if (init && !init(page, aux))
+        return false;
+
+    // 3) 흔적 정리(선택)
+    uninit->init = NULL;  // 사용 끝
+    // aux는 타입별 initializer에서 free하는 정책이라면 여기선 건드리지 않음
+
+    return true;
 }
 
 /* Free the resources hold by uninit_page. Although most of pages are transmuted
@@ -59,4 +73,8 @@ static void uninit_destroy(struct page *page) {
     struct uninit_page *uninit UNUSED = &page->uninit;
     /* TODO: Fill this function.
      * TODO: If you don't have anything to do, just return. */
+    if (uninit->aux) {
+        free(uninit->aux);
+        uninit->aux = NULL;
+    }
 }
