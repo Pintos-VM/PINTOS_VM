@@ -168,10 +168,10 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED, bool us
         /* TODO: Your code goes here */
         return vm_do_claim_page(page);
     else {
+        uint64_t prev_addr = pg_round_down(addr + 8);
         uint64_t page_addr = pg_round_down(addr);
-        uint64_t prev_addr = page_addr + PGSIZE;
         struct page *prev_page;
-        if (prev_addr < USER_STACK && prev_addr > (USER_STACK - (1 << 20)) &&
+        if (prev_addr < USER_STACK && page_addr > (USER_STACK - (1 << 20)) &&
             (prev_page = spt_find_page(&thread_current()->spt, prev_addr)) != NULL) {
             if ((prev_page->anon.type & VM_STACK) == VM_STACK) {
                 vm_stack_growth(page_addr);
