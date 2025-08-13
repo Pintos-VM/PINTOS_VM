@@ -15,7 +15,10 @@ static const struct page_operations file_ops = {
 };
 
 /* The initializer of file vm */
-void vm_file_init(void) {}
+void vm_file_init(void) {
+    
+
+}
 
 /* Initialize the file backed page */
 bool file_backed_initializer(struct page *page, enum vm_type type, void *kva) {
@@ -41,7 +44,11 @@ static void file_backed_destroy(struct page *page) {
 }
 
 /* Do the mmap */
-void *do_mmap(void *addr, size_t length, int writable, struct file *file, off_t offset) {}
+void *do_mmap(void *addr, size_t length, int writable, struct file *file, off_t offset) {
+
+}
 
 /* Do the munmap */
-void do_munmap(void *addr) {}
+void do_munmap(void *addr) {
+
+}

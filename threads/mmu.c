@@ -104,8 +104,10 @@ static bool pt_for_each(uint64_t *pt, pte_for_each_func *func, void *aux, unsign
         uint64_t *pte = &pt[i];
         if (((uint64_t)*pte) & PTE_P) {
             void *va =
-                (void *)(((uint64_t)pml4_index << PML4SHIFT) | ((uint64_t)pdp_index << PDPESHIFT) |
-                         ((uint64_t)pdx_index << PDXSHIFT) | ((uint64_t)i << PTXSHIFT));
+                (void *)(((uint64_t)pml4_index << PML4SHIFT) 
+                        | ((uint64_t)pdp_index << PDPESHIFT) 
+                        | ((uint64_t)pdx_index << PDXSHIFT) 
+                        | ((uint64_t)i << PTXSHIFT));
             if (!func(pte, va, aux))
                 return false;
         }

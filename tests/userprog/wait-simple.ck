@@ -1,4 +1,4 @@
-# -*- perl -*-
+50# -*- perl -*-
 use strict;
 use warnings;
 use tests::tests;

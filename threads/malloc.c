@@ -81,31 +81,35 @@ void malloc_init(void) {
 }
 
 /* Obtains and returns a new block of at least SIZE bytes.
-   Returns a null pointer if memory is not available. */
+   Returns a null pointer if memory is not available. 
+    최소 SIZE 바이트의 새 블록을 가져와 반환합니다.
+   메모리를 사용할 수 없는 경우 널 포인터를 반환합니다.*/
 void *malloc(size_t size) {
     struct desc *d;
     struct block *b;
     struct arena *a;
 
-    /* A null pointer satisfies a request for 0 bytes. */
+    /* A null pointer satisfies a request for 0 bytes. 
+    널 포인터는 0바이트에 대한 요청을 충족합니다.*/
     if (size == 0)
         return NULL;
 
-    /* Find the smallest descriptor that satisfies a SIZE-byte
-       request. */
+    /* Find the smallest descriptor that satisfies a SIZE-byte request. 
+    SIZE-바이트 요청을 만족하는 가장 작은 설명자 찾기 */
     for (d = descs; d < descs + desc_cnt; d++)
         if (d->block_size >= size)
             break;
     if (d == descs + desc_cnt) {
-        /* SIZE is too big for any descriptor.
-           Allocate enough pages to hold SIZE plus an arena. */
+        /* SIZE is too big for any descriptor. Allocate enough pages to hold SIZE plus an arena.
+         SIZE는 설명자로 사용하기에 너무 큽니다. SIZE에 아레나를 더할 수 있는 충분한 페이지를 할당하세요 */
         size_t page_cnt = DIV_ROUND_UP(size + sizeof *a, PGSIZE);
         a = palloc_get_multiple(0, page_cnt);
         if (a == NULL)
             return NULL;
 
         /* Initialize the arena to indicate a big block of PAGE_CNT
-           pages, and return it. */
+           pages, and return it.
+           아레나를 초기화하여 큰 블록의 PAGE_CNT  페이지를 반환합니다 */
         a->magic = ARENA_MAGIC;
         a->desc = NULL;
         a->free_cnt = page_cnt;
@@ -114,18 +118,21 @@ void *malloc(size_t size) {
 
     lock_acquire(&d->lock);
 
-    /* If the free list is empty, create a new arena. */
+    /* If the free list is empty, create a new arena. 
+     무료 목록이 비어 있으면 새 아레나를 만드세요.*/
     if (list_empty(&d->free_list)) {
         size_t i;
 
-        /* Allocate a page. */
+        /* Allocate a page.
+        페이지를 할당합니다. */
         a = palloc_get_page(0);
         if (a == NULL) {
             lock_release(&d->lock);
             return NULL;
         }
 
-        /* Initialize arena and add its blocks to the free list. */
+        /* Initialize arena and add its blocks to the free list.
+        아레나를 초기화하고 해당 블록을 무료 목록에 추가합니다. */
         a->magic = ARENA_MAGIC;
         a->desc = d;
         a->free_cnt = d->blocks_per_arena;
@@ -135,7 +142,8 @@ void *malloc(size_t size) {
         }
     }
 
-    /* Get a block from free list and return it. */
+    /* Get a block from free list and return it.
+     무료 목록에서 블록을 가져와서 반환합니다. */
     b = list_entry(list_pop_front(&d->free_list), struct block, free_elem);
     a = block_to_arena(b);
     a->free_cnt--;
