@@ -4,34 +4,40 @@
 
 #include "threads/palloc.h"
 
-enum vm_type {
-    /* page not initialized */
-    VM_UNINIT = 0,
-    /* page not related to the file, aka anonymous page */
-    VM_ANON = 1,
-    /* page that realated to the file */
-    VM_FILE = 2,
-    /* page that hold the page cache, for project 4 */
-    VM_PAGE_CACHE = 3,
+// enum vm_type {
+//     /* page not initialized */
+//     VM_UNINIT = 0,
+//     /* page not related to the file, aka anonymous page */
+//     VM_ANON = 1,
+//     /* page that realated to the file */
+//     VM_FILE = 2,
+//     /* page that hold the page cache, for project 4 */
+//     VM_PAGE_CACHE = 3,
 
-    /* Bit flags to store state */
+//     /* Bit flags to store state */
 
-    /* Auxillary bit flag marker for store information. You can add more
-     * markers, until the value is fit in the int. */
-    VM_MARKER_0 = (1 << 3),
-    VM_MARKER_1 = (1 << 4),
+//     /* Auxillary bit flag marker for store information. You can add more
+//      * markers, until the value is fit in the int. */
+//     VM_MARKER_0 = (1 << 3),
+//     VM_MARKER_1 = (1 << 4),
 
-    /* DO NOT EXCEED THIS VALUE. */
-    VM_MARKER_END = (1 << 31),
-};
+//     /* DO NOT EXCEED THIS VALUE. */
+//     VM_MARKER_END = (1 << 31),
+// };
 
+#include "lib/kernel/hash.h"
 #include "threads/mmu.h"
+#include "threads/synch.h"
 #include "vm/anon.h"
 #include "vm/file.h"
+#include "vm/types.h"
 #include "vm/uninit.h"
 #ifdef EFILESYS
 #include "filesys/page_cache.h"
 #endif
+
+struct anon_page;
+struct file_page;
 
 struct page_operations;
 struct thread;
@@ -39,7 +45,7 @@ struct thread;
 struct anon_aux;
 struct file_aux;
 
-#define VM_TYPE(type) ((type)&7)
+#define VM_TYPE(type) ((type) & 7)
 
 /* The representation of "page".
  * This is kind of "parent class", which has four "child class"es, which are
@@ -85,6 +91,10 @@ struct page_operations {
     enum vm_type type;
 };
 
+// extern const struct page_operations uninit_ops;
+// extern const struct page_operations anon_ops;
+// extern const struct page_operations file_ops;
+
 #define swap_in(page, v) (page)->operations->swap_in((page), v)
 #define swap_out(page) (page)->operations->swap_out(page)
 #define destroy(page)                \
@@ -94,7 +104,15 @@ struct page_operations {
 /* Representation of current process's memory space.
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
-struct supplemental_page_table {};
+struct supplemental_page_table {
+    struct hash ht;
+};
+
+struct spt_entry {
+    void *va;               // pg_round_down된 VA (Key)
+    struct page *page;      // 해당 VA의 페이지
+    struct hash_elem elem;  // 해시 노드
+};
 
 #include "threads/thread.h"
 void supplemental_page_table_init(struct supplemental_page_table *spt);
@@ -104,6 +122,8 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt);
 struct page *spt_find_page(struct supplemental_page_table *spt, void *va);
 bool spt_insert_page(struct supplemental_page_table *spt, struct page *page);
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page);
+
+void spt_init(struct supplemental_page_table *spt);
 
 void vm_init(void);
 bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write, bool not_present);
@@ -115,7 +135,5 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 void vm_dealloc_page(struct page *page);
 bool vm_claim_page(void *va);
 enum vm_type page_get_type(struct page *page);
-
-static void frame_init(void);
 
 #endif /* VM_VM_H */
