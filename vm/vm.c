@@ -20,7 +20,7 @@ void vm_init(void) {
 }
 static unsigned page_hash(const struct hash_elem *p_, void *aux UNUSED);
 static bool page_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED);
-static void hash_elem_destructor(struct hash_elem* he, void* aux);
+static void hash_elem_destructor(struct hash_elem *he, void *aux);
 
 /* Get the type of the page. This function is useful if you want to know the
  * type of the page after it will be initialized.
@@ -161,25 +161,19 @@ static bool vm_handle_wp(struct page *page UNUSED) {}
 bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED, bool user UNUSED,
                          bool write UNUSED, bool not_present UNUSED) {
     struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
-    struct page *page = spt_find_page(spt, addr);
+    uint64_t addr_rd = pg_round_down(addr);
+    struct page *page = spt_find_page(spt, addr_rd);
 
     /* TODO: Validate the fault */
-    if (page != NULL)
-        /* TODO: Your code goes here */
+    if (page != NULL) {
         return vm_do_claim_page(page);
-    else {
-        uint64_t prev_addr = pg_round_down(addr + 8);
-        uint64_t page_addr = pg_round_down(addr);
-        struct page *prev_page;
-        if (prev_addr < USER_STACK && page_addr > (USER_STACK - (1 << 20)) &&
-            (prev_page = spt_find_page(&thread_current()->spt, prev_addr)) != NULL) {
-            if ((prev_page->anon.type & VM_STACK) == VM_STACK) {
-                vm_stack_growth(page_addr);
-                return true;
-            }
-        }
-        return false;
+    } else if (  USER_STACK > addr_rd 
+        &&  addr_rd > (USER_STACK - (1 << 20))
+    && addr >= (void *)f->rsp - 8) {
+        vm_stack_growth(addr_rd);
+        return true;
     }
+    return false;
 }
 
 /* Free the page.
@@ -229,12 +223,12 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
         struct page *new_page;
         switch (p->operations->type) {
             case VM_UNINIT:
-                new_page = calloc(1,sizeof(struct page));
+                new_page = calloc(1, sizeof(struct page));
 
-                struct lazy_read_file* lrf = calloc(1,sizeof(struct lazy_read_file));
-                memcpy(lrf,p->uninit.aux, sizeof(struct lazy_read_file));
+                struct lazy_read_file *lrf = calloc(1, sizeof(struct lazy_read_file));
+                memcpy(lrf, p->uninit.aux, sizeof(struct lazy_read_file));
                 uninit_new(new_page, p->va, p->uninit.init, p->uninit.type, lrf,
-                           p->uninit.page_initializer); //안되면 new_page -> p 로 바꾸기
+                           p->uninit.page_initializer);  // 안되면 new_page -> p 로 바꾸기
                 hash_insert(&dst->spt_hash_table, &new_page->hash_elem);
                 break;
             case VM_ANON:
@@ -279,9 +273,9 @@ static bool page_less(const struct hash_elem *a_, const struct hash_elem *b_, vo
     return a->va < b->va;
 }
 
-static void hash_elem_destructor(struct hash_elem* he, void* aux){
-    struct page* p = hash_entry(he,struct page, hash_elem);
-    if(p->frame != NULL){
+static void hash_elem_destructor(struct hash_elem *he, void *aux) {
+    struct page *p = hash_entry(he, struct page, hash_elem);
+    if (p->frame != NULL) {
         free(p->frame);
     }
     free(p);
