@@ -54,6 +54,12 @@ struct init_data {
 /* General process initializer for initd and other process. */
 static void process_init(void) {
     struct thread *current = thread_current();
+    // 파일 디스크립터 테이블 초기화
+    // 실행 파일 write deny 설정
+    // 현재 작업 디렉터리
+    // 리스트
+    // 락 초기화
+    // 위 내용을 이 함수에서 해야하지 않을까?
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
@@ -64,26 +70,37 @@ static void process_init(void) {
 tid_t process_create_initd(const char *file_name) {
     char *fn_copy;
     tid_t tid;
+    // init_data는 스택 보다는 힙에 권장 하므로 확인 필요
     struct init_data init_data;
     struct thread *t = thread_current();
 
     /* Make a copy of FILE_NAME.
      * Otherwise there's a race between the caller and load(). */
+
+    // 디버깅/재현성 위해 초기 상태를 0으로 초기화하는 건 어떨까?
+    // palloc_get_page(PAL_ZERO)
     fn_copy = palloc_get_page(0);
     if (fn_copy == NULL)
         return TID_ERROR;
     strlcpy(fn_copy, file_name, PGSIZE);
     init_data.file_name = fn_copy;
     init_data.parent = t;
-
     char *saveptr = NULL;
+    // 원본 file_name을 통해 토큰화하는데, 이는 const char *file_name 상수라는 의미를 무시하는 것
+    // 같음) 따라서, 스레드 이름 추출용도 따로 복사본을 만들어 두는 건 어떨까?
     char *file_cut = strtok_r(file_name, " ", &saveptr);
 
     /* Create a new thread to execute FILE_NAME. */
     tid = thread_create(file_cut, PRI_DEFAULT, initd, &init_data);
-    sema_down(&t->wait_sema);
-    if (tid == TID_ERROR)
+    // TID_ERROR면 자식 스레드가 없어서 세마포어를 올려줄 주체가 없다.
+    // 따라서, sema_down이 먼저 실행되면 데드락 가능
+    if (tid == TID_ERROR) {
         palloc_free_page(fn_copy);
+        return TID_ERROR;  // 에러 반환
+    }
+    // 현재는 부모의 wait_sema를 기다리는데, 자식 구조체에 load_sema를 만들어서 기다는 게 어떨까?
+    // (고민 필요)
+    sema_down(&t->wait_sema);
     return tid;
 }
 
@@ -93,13 +110,21 @@ static void initd(void *init_data_) {
     supplemental_page_table_init(&thread_current()->spt);
 #endif
     process_init();
+
     struct init_data *init_data = (struct init_data *)init_data_;
     struct thread *t = thread_current();
+
     t->parent = init_data->parent;
     list_push_back(&t->parent->childs, &t->sibling_elem);
+
+    /* process_exec()는 성공하면 리턴하지 않음
+    따라서, sema_up까지 절대 못 오기 때문에 process_exec() 호출 전에 sema_up 호출 */
     sema_up(&t->parent->wait_sema);
-    if (process_exec(init_data->file_name) < 0)
+    int exec_status = process_exec(init_data->file_name);
+
+    if (exec_status < 0)
         PANIC("Fail to launch initd\n");
+
     NOT_REACHED();
 }
 
@@ -313,6 +338,9 @@ int process_exec(void *f_name) {
 
     /* We first kill the current context */
     process_cleanup();
+
+    /* SPT 새로 초기화 */
+    supplemental_page_table_init(&thread_current()->spt);
 
     /* And then load the binary */
     success = load(file_name, args, &_if);
@@ -593,13 +621,19 @@ static bool load(const char *file_name, char *args, struct intr_frame *if_) {
     push_stack(NULL, (8 - total_mod8) % 8, if_);
 
     push_stack(NULL, sizeof(uintptr_t), if_);
+
     for (int i = argc - 1; i >= 0; i--) {
         push_stack((char *)(&stack_ptr[i]), sizeof(uintptr_t), if_);
     }
-    push_stack(NULL, sizeof(uintptr_t), if_);
-    if_->R.rsi = sizeof(uintptr_t) + if_->rsp;
+
+    uintptr_t argv_addr = if_->rsp;
+    push_stack((char *)&argv_addr, sizeof(uintptr_t), if_);
+
+    if_->R.rsi = (uint64_t)argv_addr;
     if_->R.rdi = argc;
     //  feat/arg-parse
+
+    push_stack(NULL, sizeof(uintptr_t), if_);
 
     file_deny_write(file_a->file_ptr);
     int fd = set_fd(file_a);
@@ -855,6 +889,24 @@ static bool lazy_load_segment(struct page *page, void *aux) {
     /* TODO: Load the segment from the file */
     /* TODO: This called when the first page fault occurs on address VA. */
     /* TODO: VA is available when calling this function. */
+    struct file_aux *file_aux = aux;
+    uint8_t *dst = page->frame->kva;  // 또는 인자로 받은 kva가 있다면 그걸 사용
+    off_t ofs = file_aux->offset;
+    size_t n = file_aux->read_bytes;
+
+    // 1) 파일에서 읽기 (정확한 길이 보장)
+    off_t r = file_read_at(file_aux->file, dst, n, ofs);
+    if (r != (off_t)n) {
+        free(file_aux);
+        return false;
+    }
+
+    // 2) 나머지 0 채우기
+    memset(dst + n, 0, file_aux->zero_bytes);
+
+    // 3) aux 정리
+    free(file_aux);
+    return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -885,28 +937,67 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
         /* TODO: Set up aux to pass information to the lazy_load_segment. */
-        void *aux = NULL;
-        if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable, lazy_load_segment, aux))
+        struct file_aux *aux = malloc(sizeof *aux);
+        aux->file = file;   // 필요 시 file_reopen(file) 정책
+        aux->offset = ofs;  // 이 페이지의 파일 오프셋
+        aux->read_bytes = page_read_bytes;
+        aux->zero_bytes = page_zero_bytes;
+        aux->writable = writable;
+        if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable, lazy_load_segment, aux)) {
+            free(aux);  // 메모리 누수 방지
             return false;
+        }
 
         /* Advance. */
         read_bytes -= page_read_bytes;
         zero_bytes -= page_zero_bytes;
         upage += PGSIZE;
+        // 파일 오프셋도 읽은 만큼 증가
+        ofs += page_read_bytes;
     }
     return true;
 }
 
 /* Create a PAGE of stack at the USER_STACK. Return true on success. */
 static bool setup_stack(struct intr_frame *if_) {
-    bool success = false;
     void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 
     /* TODO: Map the stack on stack_bottom and claim the page immediately.
      * TODO: If success, set the rsp accordingly.
      * TODO: You should mark the page is stack. */
     /* TODO: Your code goes here */
+    void *upage = pg_round_down(stack_bottom);
+    if (!vm_alloc_page_with_initializer(VM_ANON, upage, true, NULL, NULL)) {
+        return false;
+    }
+    if (!vm_claim_page(upage)) {
+        return false;
+    }
+    if_->rsp = USER_STACK;
 
-    return success;
+    return true;
 }
 #endif /* VM */
+
+static uint64_t *push_stack(char *arg, size_t size, struct intr_frame *if_) {
+    ASSERT(size >= 0);
+    bool alloc_fail = false;
+    uintptr_t old_rsp = if_->rsp;
+    if_->rsp = old_rsp - size;
+
+    size_t n = pg_diff(old_rsp, if_->rsp);
+
+    if (old_rsp == USER_STACK) {
+        n -= 1;
+    }
+
+    for (char *cur = if_->rsp; cur < old_rsp; cur++) {
+        if (arg) {
+            *cur = *((char *)arg);
+            arg++;
+        } else {
+            *cur = '\0';
+        }
+    }
+    return if_->rsp;
+}
