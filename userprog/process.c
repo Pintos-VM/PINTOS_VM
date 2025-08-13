@@ -828,28 +828,7 @@ static uint64_t *push_stack(char *arg, size_t size, struct intr_frame *if_) {
         n -= 1;
     }
 
-    uintptr_t page_bottom = pg_round_down(old_rsp);
-    for (int i = 0; i < n; i++) {
-        page_bottom -= PGSIZE;
-        uint8_t *kpage = palloc_get_page(PAL_USER | PAL_ZERO);
-        if (kpage != NULL) {
-            if (!install_page(page_bottom, kpage, true)) {
-                palloc_free_page(kpage);
-                page_bottom += PGSIZE;
-                alloc_fail = true;
-                break;
-            }
-        }
-    }
-
-    if (alloc_fail) {
-        for (; page_bottom < pg_round_down(old_rsp); page_bottom += PGSIZE) {
-            palloc_free_page(page_bottom);
-        }
-        if_->rsp = old_rsp;
-        return NULL;
-    }
-
+    
     for (char *cur = if_->rsp; cur < old_rsp; cur++) {
         if (arg) {
             *cur = *((char *)arg);
@@ -884,11 +863,6 @@ static uint64_t *pop_stack(size_t size, struct intr_frame *if_) {
 
     if (if_->rsp == USER_STACK) {
         n -= 1;
-    }
-
-    for (int i = 0; i < n; i++) {
-        palloc_free_page(page_bottom);
-        page_bottom += PGSIZE;
     }
 
     return if_->rsp;
