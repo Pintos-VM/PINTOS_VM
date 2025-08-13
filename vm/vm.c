@@ -167,9 +167,8 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED, bool us
     /* TODO: Validate the fault */
     if (page != NULL) {
         return vm_do_claim_page(page);
-    } else if (  USER_STACK > addr_rd 
-        &&  addr_rd > (USER_STACK - (1 << 20))
-    && addr >= (void *)f->rsp - 8) {
+    } else if (USER_STACK > addr_rd && addr_rd > (USER_STACK - (1 << 20)) &&
+               addr >= (void *)f->rsp - 8) {
         vm_stack_growth(addr_rd);
         return true;
     }
