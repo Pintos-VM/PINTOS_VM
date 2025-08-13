@@ -49,29 +49,29 @@ static struct frame *vm_evict_frame(void);
  * page, do not create it directly and make it through this function or
  * `vm_alloc_page`. */
 bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writable,
-                                    vm_initializer *init UNUSED, void *aux) {
-    (void)*init;
+                                    vm_initializer *init, void *aux) {
     ASSERT(is_user_vaddr(upage));  // 유저 영역 주소인지 확인
     ASSERT(VM_TYPE(type) != VM_UNINIT);
     ASSERT(pg_ofs(upage) == 0);  // 페이지 정렬 보장
 
     struct thread *t = thread_current();
     struct supplemental_page_table *spt = &t->spt;
+    void *va = pg_round_down(upage);
 
     /* Check wheter the upage is already occupied or not. */
     /* 이미 등록된 VA인지 확인 */
-    if (spt_find_page(spt, upage) != NULL)
+    if (spt_find_page(spt, va) != NULL)
         return false;
 
     /* page 할당 */
-    struct page *page = malloc(sizeof(struct page));
+    struct page *page = calloc(1, sizeof(struct page));
     if (page == NULL) {
         free(aux);
         return false;
     }
 
-    /* 페이지 소유자 등록 */
-    page->owner = t;
+    /* 페이지 초기화 */
+    page->va = va;
 
     /* 타입별 page_initializer 선택 */
     bool (*page_initializer)(struct page *, enum vm_type, void *) = NULL;
@@ -91,9 +91,9 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
     /* uninit 페이지로 생성 (init은 NULL로, 실제 로딩은 type별 init이 수행) */
     // init은 특별한 초기 동작(예: 특정 포맷 디코딩, 커스텀 읽기 전략 등)을
     // 페이지마다 다른 로딩 로직을 요구할 때 사용
-    uninit_new(page, upage, NULL, type, aux, page_initializer);
+    uninit_new(page, va, init, type, aux, page_initializer);
 
-    /* 쓰기 권한 보관 */
+    page->owner = t;
     page->writable = writable;
 
     /* SPT에 삽입 */
@@ -122,36 +122,42 @@ static bool spt_less(const struct hash_elem *a, const struct hash_elem *b, void 
 
 static void spt_destroy_elem(struct hash_elem *e, void *aux UNUSED) {
     struct spt_entry *se = hash_entry(e, struct spt_entry, elem);
-    // page/destroy/aux 정리는 정책에 맞게
-    // destroy(se->page);
-    // free(se->page);
-    free(se);
+    vm_dealloc_page(se->page);
+    // // page/destroy/aux 정리는 정책에 맞게
+    // // destroy(se->page);
+    // // free(se->page);
+    // free(se);
 }
 
 /* Find VA from spt and return page. On error, return NULL. */
-struct page *spt_find_page(struct supplemental_page_table *spt, void *va) {
+struct page *spt_find_page(struct supplemental_page_table *spt, void *addr) {
     /* TODO: Fill this function. */
-    void *key_va = pg_round_down(va);
-    struct spt_entry key = {.va = key_va};
+    struct spt_entry key;
+    key.va = pg_round_down(addr);
     struct hash_elem *e = hash_find(&spt->ht, &key.elem);
+    if (!e) {
+        return NULL;
+    }
 
-    return e ? hash_entry(e, struct spt_entry, elem)->page : NULL;
+    struct spt_entry *se = hash_entry(e, struct spt_entry, elem);
+    return se->page;
 }
 
 /* Insert PAGE into spt with validation. */
 bool spt_insert_page(struct supplemental_page_table *spt, struct page *page) {
     /* TODO: Fill this function. */
-    void *va = page->va;  // 주소는 반드시 페이지 경계에 있어야 함
+    ASSERT(page != NULL);
+
     struct spt_entry *se = malloc(sizeof *se);
     if (!se) {
         return false;
     }
 
-    se->va = va;
+    se->va = pg_round_down(page->va);
     se->page = page;
 
-    struct hash_elem *old = hash_insert(&spt->ht, &se->elem);
-    if (old != NULL) {
+    struct hash_elem *dup = hash_insert(&spt->ht, &se->elem);
+    if (dup) {
         free(se);
         return false;
     }
@@ -285,9 +291,9 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write
         return false;
 
     // 커널 컨텍스트에서 난 폴트면(= user == false) 여기서 끝
-
     if (!user)
         return false;
+
     struct thread *t = thread_current();
     struct supplemental_page_table *spt = &t->spt;
     void *va = pg_round_down(addr);  // 페이지 경계로 내리기
@@ -371,17 +377,31 @@ static bool vm_do_claim_page(struct page *page) {
     if (frame == NULL) {
         return false;
     }
+
     /* Set links */
     frame->page = page;
     page->frame = frame;
 
     /* TODO: Insert page table entry to map page's VA to frame's PA. */
-    /* 2) 페이지 내용 채우기 (lazy 로딩/zero-fill 등) */
-    if (!swap_in(page, frame->kva)) {
-        // 실패 시 링크 해제 + 프레임 반납
+    /* 2) 페이지 내용 채우기 */
+    bool ok;
+    ok = swap_in(page, frame->kva);
+    // if (page->operations->type == VM_UNINIT) {
+    //     /* 첫 접근: lazy initializer 실행
+    //        - anon: zero-fill
+    //        - file: file_read_at + zero-fill */
+    //     ok = uninit_initialize(page, frame->kva);
+    // } else {
+    //     /* 이미 타입 확정된 페이지:
+    //        - 스왑으로 나갔다가 돌아오는 경우 등 */
+    //     ok = swap_in(page, frame->kva);
+    // }
+
+    if (!ok) {
+        /* 롤백 */
         page->frame = NULL;
         frame->page = NULL;
-        vm_free_frame(frame);  // 함수 구현 필요 (테이블에서 제거 + palloc_free_page)
+        vm_free_frame(frame);
         return false;
     }
 

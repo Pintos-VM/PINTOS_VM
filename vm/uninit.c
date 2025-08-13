@@ -13,7 +13,7 @@
 #include "threads/malloc.h"
 #include "vm/vm.h"
 
-static bool uninit_initialize(struct page *page, void *kva);
+bool uninit_initialize(struct page *page, void *kva);
 static void uninit_destroy(struct page *page);
 
 /* DO NOT MODIFY this struct */
@@ -28,6 +28,7 @@ static const struct page_operations uninit_ops = {
 void uninit_new(struct page *page, void *va, vm_initializer *init, enum vm_type type, void *aux,
                 bool (*initializer)(struct page *, enum vm_type, void *)) {
     ASSERT(page != NULL);
+    va = pg_round_down(va);
 
     *page = (struct page){.operations = &uninit_ops,
                           .va = va,
@@ -46,7 +47,7 @@ static bool uninit_initialize(struct page *page, void *kva) {
 
     vm_initializer *init = uninit->init;  // (struct page*, void*)
     void *aux = uninit->aux;
-    enum vm_type type = uninit->type;  // ← 오타 수정
+    enum vm_type type = uninit->type;
 
     // 1) 타입별 객체로 전환 (ops 교체 포함)
     if (!uninit->page_initializer(page, type, kva))
@@ -54,7 +55,7 @@ static bool uninit_initialize(struct page *page, void *kva) {
 
     ASSERT(page->operations && page->operations->type != VM_UNINIT);
 
-    // 2) (옵션) 2차 초기화기
+    // 2) (옵션) 2차 초기화
     if (init && !init(page, aux))
         return false;
 
